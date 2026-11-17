@@ -69,6 +69,12 @@ public class YoutubeDownloader {
     Process process;
 
     public void download(String id, CallBack callBack) {
+        // Android port: yt-dlp.exe is a Windows binary and cannot run on Android.
+        // Skip the download + exec path entirely on the Android build.
+        if (Boolean.getBoolean("sigma.android")) {
+            System.out.println("[Android] YouTube video download (yt-dlp) is not supported on this build");
+            return;
+        }
         if (downloading) return;
         setUPProxy();
         String ytURL = new StringBuilder().append("https://www.youtube.com/watch?v=").append(id).toString();

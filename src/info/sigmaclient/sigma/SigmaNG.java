@@ -72,10 +72,12 @@ public class SigmaNG {
     }
     public void initClient(){
         premiumManager.init();
+        // Android port: a failing minimap load must never abort the whole client init.
         try {
             minimap.load();
-        } catch (IOException e) {
-            throw new RuntimeException(e);
+        } catch (IOException | RuntimeException e) {
+            org.apache.logging.log4j.LogManager.getLogger().warn(
+                "Minimap load failed (non-fatal): {}", String.valueOf(e));
         }
         if(!ConfigManager.normalDir.exists())
             ConfigManager.normalDir.mkdir();

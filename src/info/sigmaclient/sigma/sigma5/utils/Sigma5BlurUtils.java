@@ -51,16 +51,21 @@ public class Sigma5BlurUtils {
     static ShaderGroup group;
     static int lastWidth, lastHeight;
     private static void init(){
+        if (group == null) return;
         group.createBindFramebuffers(mc.getMainWindow().getFramebufferWidth(), mc.getMainWindow().getFramebufferHeight());
         lastWidth = mc.getMainWindow().getFramebufferWidth();
         lastHeight = mc.getMainWindow().getFramebufferHeight();
     }
     public static void initAll() {
+        // Android port (GL4ES): never crash the client when the blur shader chain
+        // cannot be created on mobile GPU drivers; just disable the effect.
         try {
             group = new ShaderGroup(mc.getTextureManager(), mc.getResourceManager(), mc.getFramebuffer(), vanillaBlur, "vanillablur");
             init();
-        } catch (IOException e) {
-            throw new RuntimeException(e);
+        } catch (Throwable t) {
+            group = null;
+            org.apache.logging.log4j.LogManager.getLogger().warn(
+                "Sigma5 blur disabled (shader init failed): {}", String.valueOf(t));
         }
     }
     private static void setValues(float strength) {
@@ -70,6 +75,7 @@ public class Sigma5BlurUtils {
     }
 
     public static void vblur(float v){
+        if (group == null) return;
         if(v == 0) return;
         if(mc.getMainWindow().getFramebufferWidth() != 0 && mc.getMainWindow().getFramebufferHeight() != 0 && (lastWidth != mc.getMainWindow().getFramebufferWidth() || lastHeight != mc.getMainWindow().getFramebufferHeight())) {
             init();

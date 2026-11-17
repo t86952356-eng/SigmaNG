@@ -17,6 +17,13 @@ public class DiscordRPC {
     public static OffsetDateTime time;
     private static final Logger LOGGER = org.apache.logging.log4j.LogManager.getLogger();
     public static void load() {
+        // Android (FCL/Pojav) port: Discord IPC relies on junixsocket natives that do not
+        // exist on Android (bionic). Loading them throws UnsatisfiedLinkError (an Error,
+        // previously uncaught) during startup. Disable entirely on the Android build.
+        if (Boolean.getBoolean("sigma.android")) {
+            LOGGER.info("[Android] Discord RPC is disabled on this build");
+            return;
+        }
         IPCClient client = new IPCClient(1278269202863624277L);
         time = OffsetDateTime.now();
         client.setListener(new IPCListener() {
@@ -42,8 +49,10 @@ public class DiscordRPC {
             client.connect();
         } catch (NoDiscordClientException e) {
             LOGGER.warn("No discord client");
-        } catch (Exception e){
-            LOGGER.warn("No discord client! #2");
+        } catch (Throwable t){
+            // Catch Throwable: junixsocket/JNA native loading failures surface as
+            // UnsatisfiedLinkError (java.lang.Error), not Exception.
+            LOGGER.warn("No discord client! #2 ({}), {}", t.getClass().getSimpleName(), String.valueOf(t.getMessage()));
         }
     }
     static int state = 0;

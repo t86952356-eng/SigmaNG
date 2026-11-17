@@ -39,14 +39,22 @@ public class BlurUtils {
         shaderGroup=null;
     }
     public static void reInit(){
+        // Android port (GL4ES): shader group creation can fail on mobile GPU drivers;
+        // a failure here must disable blur instead of crashing the client at startup.
         try {
             shaderGroup = new ShaderGroup(mc.getTextureManager(), mc.getResourceManager(), mc.getFramebuffer(), JelloSwapBlur.jello, "jelloblur");
-        } catch (IOException e) {
-            throw new RuntimeException(e);
+        } catch (Throwable t) {
+            shaderGroup = null;
+            primaryFramebuffer = null;
+            secondaryFramebuffer = null;
+            org.apache.logging.log4j.LogManager.getLogger().warn(
+                "Jello blur disabled (shader init failed): {}", String.valueOf(t));
         }
     }
     public static void updateFrame(){
         if(!SigmaNG.getSigmaNG().inGameGuiBlur) return;
+        // Android port: blur may be unavailable (null) when shader init failed.
+        if(shaderGroup == null || primaryFramebuffer == null || secondaryFramebuffer == null) return;
         if(mc.getMainWindow().getFramebufferWidth() != 0 && mc.getMainWindow().getFramebufferHeight() != 0 && (width != mc.getMainWindow().getFramebufferWidth() || height != mc.getMainWindow().getFramebufferHeight())) {
             shaderGroup.createBindFramebuffers(mc.getMainWindow().getFramebufferWidth(), mc.getMainWindow().getFramebufferHeight());
 
@@ -95,6 +103,7 @@ public class BlurUtils {
         if(blurStrength == 0) {
             return;
         }
+        if (primaryFramebuffer == null) return;
 
         GL11.glPushMatrix();
         RenderSystem.disableBlend();

@@ -31,3 +31,5 @@ runs/
 .DS_Store
 Thumbs.db
 .vscode/
+# android build output
+dist/
