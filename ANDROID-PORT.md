@@ -118,7 +118,7 @@ FCL (Amethyst backend)
    `META-INF/services` وحذف توقيعات `META-INF/*.SF|RSA|DSA`.
 4. `android/generate_version_json.py`: يولّد JSON انطلاقاً من ملف 1.16.4 الرسمي
    (arguments/assetIndex/logging) + إدخال LWJGL واحد + رابط جار العميل من الـ Release.
-5. رفع Release بالملفات: `SigmaNG-Android.jar` + `SigmaNG-Android.json` + دليل التثبيت.
+5. رفع Release بالملفات: `SigmaNG-Android-14.2.jar` + `SigmaNG-Android-14.2.json` + دليل التثبيت.
 
 ## قرارات معمارية
 
@@ -147,3 +147,62 @@ FCL (Amethyst backend)
 - ميزة حسابات Microsoft داخل العميل (HttpServer محلي — تعمل على أندرويد؛
   فتح المتصفح قد لا يعمل لكنه لا يسبب كراشاً).
 - OptiFine وشيدرزها (تعمل حسب العارض المختار).
+
+## تخفيف الحجم (commit 4 — إصدار android-v14.2)
+
+الجار: **109,155,935 → 79,407,587 بايت (−27.25%)** — **صفر تعديل في `src/`**
+(`git diff --stat -- src/` فارغ تماماً): لا ثيم ولا واجهة ولا رسم ولا موديولات.
+
+### 1) استبعاد 11 جار مكتبات من الدمج (كل واحدة بدليل grep على السورس كاملاً)
+
+| الجار | الحجم | الدليل |
+| --- | --- | --- |
+| `jave-1.0.2.jar` | 5.87MB | `it.sauronsoftware` صفر مراجع (مات بعد حذف سلسلة yt-dlp) |
+| `jna-4.4.0.jar` | 1.09MB | `com.sun.jna` صفر مراجع؛ المسار الوحيد له (oshi في GLX) مسلك ميت — لا مستدعٍ لـ `_getSystemInfo` |
+| `platform-3.4.0.jar` | 0.91MB | محتواها `com.sun.jna.platform` فقط — صفر مراجع |
+| `junixsocket-common` + `junixsocket-native-common` | 1.12MB | المستخدم الوحيد `com.jagrosh` (DiscordIPC) — معطّل على أندرويد عبر `-Dsigma.android=true` |
+| `joda-time-2.12.5.jar` | 0.64MB | `org.joda` صفر مراجع |
+| `snakeyaml-2.0.jar` | 0.33MB | `org.yaml.snakeyaml` صفر مراجع |
+| `google-api-services-analytics` + `youtubereporting` + `youtubeAnalytics` | 0.39MB | العميل يستخدم youtube v3 فقط (البحث الموسيقي) — الثلاثة بلا أي مرجع |
+| `text2speech-1.11.3-natives-windows.jar` | 0.08MB | DLL ويندوز SAPI خالصة (`SAPIWrapper_x86/x64.dll`) — لا تُحمّل على أندرويد أصلاً؛ جار الواجهة (13KB) باقٍ فيعمل الـ Narrator بتعطيل آمن |
+
+ما بقي عمداً: `oshi-core` (31KB — تحمّل تحميل GLX)، كل `commons-*` (مستخدمة من Realms/QL/NBT)،
+`httpclient/httpcore` (Realms)، سلسلة google/youtube كاملة (ميزة البحث الموسيقي)،
+`fastjson` (إعدادات/بريميوم)، opencensus (احتياطاً لمسار google-http-client).
+
+### 2) قصّ الكلاسات الميتة — `android/trim_libraries.py` (ملف جديد)
+
+تحليل وصول (reachability closure) على مستوى الـ constant pool لكل كلاس في الجار
+(32,580 كلاساً). الكلاس تحت `it/unimi/dsi/fastutil` أو `com/ibm/icu` يُحذف فقط إن
+لم يصل إليه أي مرجع ثابت من خارج الجذرين (مع العبور عبر الكلاسات المُبقاة).
+النتيجة: من 12,248 كلاساً في المكتبتين بقيت **1,691** (المستخدمة فعلاً) وحُذفت **10,557**.
+
+- أمان التحليل: المحلل يقرأ وسوم 1,3,4,5,6,7,8,9,10,11,12,15,16,17,18 وحدّه
+  `i < cp_count` (المواصفة: `constant_pool_count = عدد المداخل + 1`)، وأي فشل تحليل
+  مستقبلي = إبقاء الكلاس (لا حذفه).
+- تحقق انعكاسي: `Class.forName` مع `unimi|icu` — صفر نتائج؛ `META-INF/services` — صفر في الجارتين.
+
+### 3) `-g:none` + مستوى ضغط 9
+
+- تجميع `javac` بدون جداول تصحيح (لا تغيير سلوكي؛ الآثار تفقد أرقام الأسطر فقط).
+- كتابة الجار بـ `zipfile` مستوى 9 (كان 6).
+
+### التحقق (محلياً، نفس خطوات CI)
+
+- ترجمة كاملة: 5621 مصدراً، صفر أخطاء، 7867 كلاساً — بنفس أعداد 14.1.
+- اختبارات دخان متتالية على الجار النهائي وحده:
+  - كل كلاسات الفحص موجودة وتحمّل (بما فيها `ArabicShaping`، `Hash`،
+    `Long2ObjectOpenHashMap`، `FontRenderer` — وهي بالضبط ما كان سقط بخلل القصّ الأولي قبل إصلاحه).
+  - `staticInitTitle()` (مدخل شاشة التحميل الحقيقي) نجح كاملاً مع رسالة
+    `[Android] Discord RPC is disabled on this build`.
+  - `staticInit()` تقدّم عبر: premiumManager (fastjson) ← minimap (ملفات + OptiFine
+    Reflector) حتى أول استدعاء OpenGL صادق (`glGenTextures`) — حيث تنتهي المحاكاة
+    headless حتماً لغياب سياق GL؛ على الجهاز يوفر FCL السياق قبل هذه النقطة.
+- خلل القصّ الأولي (off-by-one في حدّ العدّاد) اكتشفه اختبار الدخان نفسه وأُصلح —
+  وهذا دليل أن الاختبار فعّال لا شكلي.
+
+### ما لم يُلمس (إثباتاً)
+
+- `git diff --stat -- src/` — **فارغ** بالكامل.
+- أصول الثيم/الواجه (`assets/minecraft/sigmang` 18MB + `sigma` 12MB) — كاملة كما هي.
+- fastutil/icu: الكلاسات المستخدمة (1,691) كلها باقية — حُذف غير المستخدم فقط.

@@ -9,8 +9,12 @@ Output layout mirrors a vanilla Minecraft client jar:
   - all compiled project classes (full Minecraft 1.16.4 source + SigmaNG client code)
   - assets/ and data/ resource trees from src/
   - every bundled library EXCEPT LWJGL (the Android launcher injects its own
-    bridged LWJGL 3.3.x build, which must never be shadowed) and compile-only
-    jars (lombok / sources / javadoc)
+    bridged LWJGL 3.3.x build, which must never be shadowed), compile-only
+    jars (lombok / sources / javadoc), and jars verified unused or
+    desktop-only (see SKIP_LIB_EXACT below).
+  - written at maximum deflate level (9).
+  Optionally post-process with android/trim_libraries.py to remove never-
+  referenced classes from large utility libraries (fastutil / icu4j).
 
 Usage:
   python3 package_client.py --src <repo>/src --libs <repo>/libs --classes <build_classes> --out dist/SigmaNG-Android.jar
@@ -23,7 +27,22 @@ import zipfile
 
 SKIP_LIB_PREFIXES = ("lwjgl", "lombok-")
 SKIP_LIB_SUFFIXES = ("-sources.jar", "-javadoc.jar")
-SKIP_LIB_EXACT = {"jinput-2.0.5.jar"}
+SKIP_LIB_EXACT = {
+    "jinput-2.0.5.jar",
+    # --- v14.2 slimming: verified unused (zero references in src) or
+    #     desktop/Windows-only. Evidence recorded in ANDROID-PORT.md. ---
+    "jave-1.0.2.jar",                       # ffmpeg binary wrapper; dead since yt-dlp removal
+    "jna-4.4.0.jar",                        # com.sun.jna - zero refs; only dead oshi path used it
+    "platform-3.4.0.jar",                   # com.sun.jna.platform - zero refs
+    "junixsocket-common-2.6.2.jar",         # only com.jagrosh DiscordIPC (disabled on Android)
+    "junixsocket-native-common-2.6.2.jar",  # same
+    "joda-time-2.12.5.jar",                 # zero refs
+    "snakeyaml-2.0.jar",                    # zero refs
+    "google-api-services-analytics-v3-rev169-1.25.0.jar",        # client only uses youtube v3
+    "google-api-services-youtubereporting-v1-rev748-1.25.0.jar", # unused
+    "google-api-services-youtubeAnalytics-v2-rev272-1.25.0.jar", # unused
+    "text2speech-1.11.3-natives-windows.jar", # Windows SAPI x86/x64 DLLs
+}
 
 # Entries never copied out of merged libraries
 SKIP_META = ("META-INF/MANIFEST.MF", "META-INF/module-info.class")
@@ -118,12 +137,12 @@ def main():
     manifest = (
         "Manifest-Version: 1.0\r\n"
         "Main-Class: net.minecraft.client.main.Main\r\n"
-        "Implementation-Title: SigmaNG-Android\r\n"
-        "Implementation-Version: 14.1-android\r\n"
+        "Implementation-Title: SigmaNG-Android-14.2\r\n"
+        "Implementation-Version: 14.2-android\r\n"
         "Specification-Title: SigmaNG Client Version (FCL + GL4ES)\r\n"
     ).encode("utf-8")
 
-    with zipfile.ZipFile(args.out, "w", zipfile.ZIP_DEFLATED, compresslevel=6) as zf:
+    with zipfile.ZipFile(args.out, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as zf:
         zf.writestr("META-INF/MANIFEST.MF", manifest)
         for name, data in services.items():
             zf.writestr(name, data)

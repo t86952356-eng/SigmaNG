@@ -8,7 +8,7 @@ on:
       release_tag:
         description: 'Release tag (recreated if it already exists)'
         required: false
-        default: 'android-v14.1'
+        default: 'android-v14.2'
 
 permissions:
   contents: write
@@ -18,9 +18,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     env:
-      CLIENT_ID: SigmaNG-Android
-      JAR_NAME: SigmaNG-Android.jar
-      JSON_NAME: SigmaNG-Android.json
+      CLIENT_ID: SigmaNG-Android-14.2
+      JAR_NAME: SigmaNG-Android-14.2.jar
+      JSON_NAME: SigmaNG-Android-14.2.json
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -36,7 +36,7 @@ jobs:
           mkdir -p build/classes
           find src -name '*.java' ! -name 'Start.java' > build/sources.txt
           echo "sources: $(wc -l < build/sources.txt)"
-          javac -J-Xmx3g --release 17 -encoding UTF-8 -nowarn \
+          javac -J-Xmx3g --release 17 -encoding UTF-8 -nowarn -g:none \
             -cp "libs/*" \
             -processorpath "libs/lombok-1.18.32.jar" \
             -d build/classes \
@@ -49,13 +49,20 @@ jobs:
             --src src --libs libs --classes build/classes \
             --out "dist/${JAR_NAME}"
 
+      - name: Trim unused library classes (fastutil / icu4j reachability)
+        run: |
+          python3 android/trim_libraries.py \
+            --jar "dist/${JAR_NAME}" \
+            --package-root it/unimi/dsi/fastutil \
+            --package-root com/ibm/icu
+
       - name: Resolve release tag
         id: tag
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ github.event.inputs.release_tag }}" ]; then
             echo "tag=${{ github.event.inputs.release_tag }}" >> "$GITHUB_OUTPUT"
           else
-            echo "tag=android-v14.1" >> "$GITHUB_OUTPUT"
+            echo "tag=android-v14.2" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Generate version JSON
@@ -75,7 +82,7 @@ jobs:
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
-          name: SigmaNG-Android
+          name: SigmaNG-Android-14.2
           path: dist/
           if-no-files-found: error
 
@@ -95,7 +102,7 @@ jobs:
             "dist/${JAR_NAME}" \
             "dist/${JSON_NAME}" \
             "dist/INSTALL-FCL.md" \
-            --title "SigmaNG 14.1 - Android Client Version (FCL + GL4ES / Krypton Wrapper)" \
+            --title "SigmaNG 14.2 - Android Client Version (FCL + GL4ES / Krypton Wrapper)" \
             --notes-file android/RELEASE_NOTES.md
           echo "Release URL:"
           gh release view "$TAG" --json url -q .url
