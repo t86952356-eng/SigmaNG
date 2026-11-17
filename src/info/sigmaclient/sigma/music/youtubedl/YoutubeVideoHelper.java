@@ -8,13 +8,9 @@ import com.google.api.client.json.jackson2.JacksonFactory;
 import com.google.api.services.youtube.YouTube;
 import com.google.api.services.youtube.model.*;
 import info.sigmaclient.sigma.SigmaNG;
-import info.sigmaclient.sigma.sigma5.youtubedl.YoutubeDownloader;
 import info.sigmaclient.sigma.config.ConfigManager;
-import info.sigmaclient.sigma.modules.gui.hide.ClickGUI;
-import info.sigmaclient.sigma.gui.clickgui.musicplayer.JelloMusicPlayer;
 import info.sigmaclient.sigma.utils.ChatUtils;
 import info.sigmaclient.sigma.utils.music.Music;
-import it.sauronsoftware.jave.Encoder;
 
 import java.io.*;
 import java.net.*;
@@ -101,34 +97,10 @@ public class YoutubeVideoHelper {
     static Thread thread = null;
 
     public static void playMusicFromLink(Music music) {
-        if (thread != null && thread.isAlive()) {
-            thread.stop();
-        }
-        thread = new Thread(() -> {
-            try {
-                new YoutubeDownloader().download(music.ytid, (file) -> {
-                    ClickGUI.clickGui.musicPlayer.mp3.SetPlayAudioPathYT(file, music);
-                    JelloMusicPlayer.currentSongLength = (int) getMp4Duration(file);
-                    System.out.println("Successfully got virtual storage location " + JelloMusicPlayer.currentSongLength + "\n");
-                });
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
-        });
-        thread.start();
-    }
-
-    public static long getMp4Duration(String videoPath) {
-        File source = new File(videoPath);
-        Encoder encoder = new Encoder();
-        long duration = 0;
-        try {
-            it.sauronsoftware.jave.MultimediaInfo info = encoder.getInfo(source);
-            duration = info.getDuration();
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-        return duration;
+        // yt-dlp.exe download+exec and JAVE (ffmpeg binary) duration probing were
+        // Windows/desktop-only. Removed in the Android port; in-game music player
+        // (local files) keeps working.
+        System.out.println("[SigmaNG] YouTube playback is disabled on this build (yt-dlp removed in the Android port).");
     }
 
     public static List<Music> search(String channelId) throws IOException {

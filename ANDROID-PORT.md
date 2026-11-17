@@ -62,6 +62,49 @@ FCL (Amethyst backend)
 5. **`src/info/sigmaclient/sigma/sigma5/utils/Sigma5BlurUtils.java`**
    - `initAll()`: التقاط `Throwable` بدل الرمي، `vblur()`/`init()`: حماية null.
 
+## الحذف الفعلي للمميزات الويندوزية/سطح-المكتبيّة (commit 2)
+
+> مسح آلي لـ 546 ملف Java الخاص بالعميل (os.name / loadLibrary / ProcessBuilder /
+> JNA / Registry / APPDATA / Robot / SystemTray / exe-dll-bat / مسارات C:\ ...)
+> — النتيجة: السورس نظيف، لا يوجد سوى البنود التالية.
+
+### ملفات محذوفة (5 — غير موجودة أصلاً في المستودع الآن)
+
+| الملف | السبب |
+| --- | --- |
+| `music/statics/player/MP3PlayerThemeDefault.java` | نافذة Swing سطح مكتب (JButton/JCheckBox/JSlider) لمشغل MP3 — لا تُعرض على أندرويد |
+| `music/statics/player/MP3PlayerTheme.java` | واجهة النافذة أعلاه — بقي بلا مستخدم |
+| `sigma5/jellomusic/player/MP3PlayerThemeDefault.java` | نسخة JelloMusic من نافذة Swing نفسها |
+| `sigma5/jellomusic/player/MP3PlayerTheme.java` | واجهتها — بقي بلا مستخدم |
+| `sigma5/youtubedl/YoutubeDownloader.java` | تنزيل وتشغيل `yt-dlp.exe` (ثنائي ويندوز) عبر `Runtime.exec` |
+
+### ملفات معدَّلة (3 — سطور معدودة، خارج الموديولات)
+
+1. **`music/statics/player/MP3Player.java`** و**`sigma5/jellomusic/player/JelloMusic.java`**
+   - `init()`: حُذف استدعاء `new MP3PlayerThemeDefault().apply(this)` (أصبح no-op موثّقاً).
+   - التشغيل الصوتي نفسه (JavaLayer/`javax.sound` — جافا خالص) لم يُمس.
+2. **`music/youtubedl/YoutubeVideoHelper.java`**
+   - `playMusicFromLink()`: أصبح no-op مع سجل واضح (كان يستدعي `yt-dlp.exe`).
+   - `getMp4Duration()`: حُذفت كلياً (كانت تستخدم JAVE = غلاف ثنائي ffmpeg سطح مكتب).
+   - أُزيلت استيرادات `YoutubeDownloader` / `ClickGUI` / `JelloMusicPlayer` / `jave.Encoder`.
+   - **بقي**: `fetchContentWithRedirect` و`downloadToFile` و`search` (HTTP خالص — تستخدمها ميزة الحسابات البديلة وميزة البحث عن الموسيقى، وتعمل على أندرويد).
+
+### ما بقي محصّناً لا محذوفاً
+
+- `DiscordRPC.java`: معطّل على أندرويد عبر `-Dsigma.android=true` (نسخة سطح المكتب من نفس المستودع تحتاجه).
+- 160 جار LWJGL + `jinput` + `Start.java`: مستبعدة من جار أندرويد فقط (سكربت التغليف)، وتبقى في المستودع لمن يبني نسخة سطح المكتب.
+
+### إثبات الالتزام بعدم لمس الموديولات
+
+- `git diff --stat -- src/info/sigmaclient/sigma/modules/` → **فارغ** تماماً.
+- نفس الشيء لـ `sigma5/killaura` و`sigma5/jelloportal` و`baritone`.
+- `Music.download()` تحقّقت: HTTP خالص (`Resources.downloadTexture`) — لا exe ولا ffmpeg.
+
+### ملاحظات توافق أندرويد (ليست ويندوزية — لا تُحذف)
+
+- مشغل الموسيقى الصوتي يعتمد `javax.sound.sampled` — قد لا يُخرج صوتاً على بعض أجهزة أندرويد (قيد JVM لا كود ويندوز).
+- نظام السكربتات (`sigma/scripts/`) يحتاج محرك Nashorn على JRE 17 (متوفر كجار مستقل إن لزم).
+
 ## البناء (GitHub Actions)
 
 `.github/workflows/build-android.yml`:

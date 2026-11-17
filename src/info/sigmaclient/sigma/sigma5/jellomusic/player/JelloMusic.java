@@ -102,7 +102,7 @@ public class JelloMusic {
     }
 
     private void init() {
-        new MP3PlayerThemeDefault().apply(this);
+        // Desktop Swing window theme (MP3PlayerThemeDefault) removed in the Android port.
     }
 
     /**

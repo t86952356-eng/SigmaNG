@@ -27,7 +27,7 @@ import javax.sound.sampled.UnsupportedAudioFileException;
 
 
 public class MP3Player {
-	
+        
   private static final long serialVersionUID = 1L;
 
   private static final Random RANDOM = new Random();
@@ -69,7 +69,7 @@ public class MP3Player {
   }
 
   public MP3Player(URL url) {
-	//this.stop();
+        //this.stop();
     add(url);
     songurl = url;
     init();
@@ -85,7 +85,7 @@ public class MP3Player {
   }
 
   private void init() {
-    new MP3PlayerThemeDefault().apply(this);
+    // Desktop Swing window theme (MP3PlayerThemeDefault) removed in the Android port.
   }
 
   /**
@@ -270,7 +270,7 @@ public class MP3Player {
               }
             //ERROR THROWN IN ZKM
               catch (BitstreamException | LineUnavailableException | DecoderException e) {
-            	  e.printStackTrace();
+                  e.printStackTrace();
                 break;
               }
             }
@@ -567,9 +567,9 @@ public class MP3Player {
   }
 
   public void getDuration() throws UnsupportedAudioFileException, IOException{
-	  if (playingSource.getFramePosition() > 0) {
-		   BufferedInputStream bis = new BufferedInputStream(inputStreamVar);
-	        //AudioInputStream sound = AudioSystem.getAudioInputStream(bis);
+          if (playingSource.getFramePosition() > 0) {
+                   BufferedInputStream bis = new BufferedInputStream(inputStreamVar);
+                //AudioInputStream sound = AudioSystem.getAudioInputStream(bis);
           AudioInputStream audioInputStream = AudioSystem.getAudioInputStream(bis);
           AudioFormat format2 = audioInputStream.getFormat();
           long frames = audioInputStream.getFrameLength();
