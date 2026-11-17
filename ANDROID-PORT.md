@@ -206,3 +206,59 @@ FCL (Amethyst backend)
 - `git diff --stat -- src/` — **فارغ** بالكامل.
 - أصول الثيم/الواجه (`assets/minecraft/sigmang` 18MB + `sigma` 12MB) — كاملة كما هي.
 - fastutil/icu: الكلاسات المستخدمة (1,691) كلها باقية — حُذف غير المستخدم فقط.
+
+## إصلاح كراش الإقلاع (commit 5 — إصدار android-v14.3)
+
+### الكراش (من تقرير FCL على جهاز حقيقي — Infinix X6833B، MT6789، Krypton/NG-GL4ES)
+
+```
+java.lang.NoClassDefFoundError: org/yaml/snakeyaml/constructor/BaseConstructor
+	at ...jelloportal.florianmichael.vialoadingbase.platform.ViaVersionPlatformImpl.<init>
+	at ...vialoadingbase.ViaLoadingBase.initPlatform → ViaMCP.create → ViaLoader.load
+	at info.sigmaclient.sigma.SigmaNG.initClient → staticInit → Minecraft.<init>
+```
+
+حدث بعد "Setting user" وتهيئة OptiFine/LWJGL بنجاح — أي أن كل تحصينات 14.1/14.2 عملت،
+والسقوط في تهيئة ViaVersion (نظام تعدد الإصدارات في jelloportal — موديول غير قابل للتعديل).
+
+### السبب الجذري
+
+استُبعد `snakeyaml-2.0.jar` في 14.2 بدليل "صفر مراجع في السورس" — لكن الفحص كان
+على مستوى المصدر فقط. **المرجع الحقيقي يأتي من جارات ViaVersion نفسها**
+(`com.viaversion.viaversion.util.Config` + `compatibility/Yaml*Compat` — 6 كلاسات
+تستورد `org.yaml.snakeyaml` مباشرة). تبعية مكتبة-لمكتبة لا تظهر أبداً في grep للسورس،
+وعلى الجهاز يعمل العميل بجار واحد فقط في الـ classpath (FCL: `-cp lwjgl.jar:wrapper.jar:client.jar`)
+فتعني أي مكتبة غائبة = `NoClassDefFoundError` فوري.
+
+كما تبيّن أن اختبار الدخان المحلي السابق كان يمرر هذا المساق دون قصد: توقف الرأس بلا
+سياق GL عند أول استدعاء `glGenTextures` — وهي نقطة **قبل** تهيئة ViaVersion في
+ترتيب `initClient`، فلم يكن هذا المسار قابلاً للاختبار بتلك الطريقة أصلاً.
+
+### الإصلاح
+
+1. **إعادة دمج `snakeyaml-2.0.jar` كاملاً** (+0.33MB مضمومة؛ الحجم النهائي 79,728,361 بايت).
+2. **إعادة تدقيق الاستبعادات العشرة الباقية على مستوى الـ bytecode** — سكربت جديد
+   `android/audit_exclusions.py`: نفس محلل الـ constant-pool المستخدم في القصّ، يطبَّق
+   على كل الكلاسات المدمجة (كلاسات المشروع + كل الجارات المُبقاة) ويبحث عن أي مرجع
+   يشير إلى داخل حزم الجارات المستبعدة. النتائج:
+   - `snakeyaml` — 6 كلاسات ViaVersion تشير إليه → **أعيد دمجه** (هو الكراش).
+   - `jna` — المستدعون: `NarratorLinux.<clinit>` (try-catch Throwable — يصمت بأمان
+     ويترك `libraryFound=false`)، `NarratorWindows` (لا يُحمَّل أبداً: `os.name=Linux`
+     على أندرويد)، `oshi` Windows internals (مسارات لا تُحمَّل على لينكس؛ والمستدعي
+     الوحيد `GLX._init` يلفها بـ try-catch Throwable — والدليل في تقرير الكراش نفسه:
+     `CPU: <unknown>`) → آمن.
+   - `platform` (jna.platform) — oshi Windows فقط → آمن.
+   - `joda-time` — مستدعٍ وحيد `fastjson JodaCodec`، وتسجيله في `ParserConfig.getDeserializer`
+     داخل نطاق 612–742 المحمي بـ `catch Throwable` خلف `Class.forName("org.joda.time...")`
+     → لن يُلمس أبداً → آمن.
+   - `junixsocket` ×2 — المستدعي الوحيد `com.jagrosh...UnixPipe`، ولا يُحمَّل إلا عبر
+     Discord RPC وهو معطّل بـ `-Dsigma.android=true` (الحارس موجود في `DiscordRPC.java:23`) → آمن.
+   - `jave` + جارات google الثلاث — صفر مستدعين في الفحص الشامل → مؤكد آمن.
+3. تجربة A/B حاسمة على مسار الكراش نفسه (`android/ProbeVia.java` يستدعي
+   `ViaLoader.load()` بالجار وحده في الـ classpath تماماً كالجهاز):
+   - جار 14.2 **المنشور فعلاً** (79,407,587 بايت، منسوخ من الـ release): نفس الكراش
+     حرفياً — `NoClassDefFoundError: ...BaseConstructor at ViaVersionPlatformImpl.<init>`.
+   - جار 14.3 الجديد: **نجاح كامل** — ViaVersion + ViaBackwards + ViaRewind (3/3 منصات)،
+     تسجيل البروتوكولات 1.4.6/7 → 1.20، وتحميل الـ mappings مع استخدام fastutil
+     المقلمة (`Long2ObjectOpenHashMap`) بنجاح — دليل إضافي أن القصّ لم يكسر حاجات ViaVersion.
+4. لا تغيير في `src/` مطلقاً؛ ولا في الثيم/الواجهة/الرسم/الموديولات.

@@ -8,7 +8,7 @@ on:
       release_tag:
         description: 'Release tag (recreated if it already exists)'
         required: false
-        default: 'android-v14.2'
+        default: 'android-v14.3'
 
 permissions:
   contents: write
@@ -18,9 +18,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     env:
-      CLIENT_ID: SigmaNG-Android-14.2
-      JAR_NAME: SigmaNG-Android-14.2.jar
-      JSON_NAME: SigmaNG-Android-14.2.json
+      CLIENT_ID: SigmaNG-Android-14.3
+      JAR_NAME: SigmaNG-Android-14.3.jar
+      JSON_NAME: SigmaNG-Android-14.3.json
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -56,13 +56,24 @@ jobs:
             --package-root it/unimi/dsi/fastutil \
             --package-root com/ibm/icu
 
+      - name: Audit library exclusions (lib-to-lib references)
+        run: |
+          python3 android/audit_exclusions.py --classes build/classes
+
+      - name: Smoke test - ViaVersion init path (v14.2 device crash path)
+        run: |
+          mkdir -p build/probe build/probe_run
+          javac -d build/probe android/ProbeVia.java
+          cd build/probe_run
+          java -cp "../probe:../../dist/${JAR_NAME}" ProbeVia
+
       - name: Resolve release tag
         id: tag
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ github.event.inputs.release_tag }}" ]; then
             echo "tag=${{ github.event.inputs.release_tag }}" >> "$GITHUB_OUTPUT"
           else
-            echo "tag=android-v14.2" >> "$GITHUB_OUTPUT"
+            echo "tag=android-v14.3" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Generate version JSON
@@ -82,7 +93,7 @@ jobs:
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
-          name: SigmaNG-Android-14.2
+          name: SigmaNG-Android-14.3
           path: dist/
           if-no-files-found: error
 
@@ -102,7 +113,7 @@ jobs:
             "dist/${JAR_NAME}" \
             "dist/${JSON_NAME}" \
             "dist/INSTALL-FCL.md" \
-            --title "SigmaNG 14.2 - Android Client Version (FCL + GL4ES / Krypton Wrapper)" \
+            --title "SigmaNG 14.3 - Android Client Version (FCL + GL4ES / Krypton Wrapper)" \
             --notes-file android/RELEASE_NOTES.md
           echo "Release URL:"
           gh release view "$TAG" --json url -q .url

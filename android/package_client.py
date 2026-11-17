@@ -29,15 +29,19 @@ SKIP_LIB_PREFIXES = ("lwjgl", "lombok-")
 SKIP_LIB_SUFFIXES = ("-sources.jar", "-javadoc.jar")
 SKIP_LIB_EXACT = {
     "jinput-2.0.5.jar",
-    # --- v14.2 slimming: verified unused (zero references in src) or
-    #     desktop/Windows-only. Evidence recorded in ANDROID-PORT.md. ---
-    "jave-1.0.2.jar",                       # ffmpeg binary wrapper; dead since yt-dlp removal
-    "jna-4.4.0.jar",                        # com.sun.jna - zero refs; only dead oshi path used it
-    "platform-3.4.0.jar",                   # com.sun.jna.platform - zero refs
-    "junixsocket-common-2.6.2.jar",         # only com.jagrosh DiscordIPC (disabled on Android)
+    # --- v14.2/v14.3 slimming: verified unused or desktop/Windows-only.
+    #     Every entry was re-audited for LIB-TO-LIB references (constant-pool
+    #     scan of all merged jars + project classes; see
+    #     scripts/audit_exclusions.py and ANDROID-PORT.md). snakeyaml was
+    #     wrongly excluded in v14.2 (referenced by ViaVersion's own jars,
+    #     caused the FCL NoClassDefFoundError crash) and is merged again
+    #     since v14.3. ---
+    "jave-1.0.2.jar",                       # ffmpeg binary wrapper; dead since yt-dlp removal; zero refs
+    "jna-4.4.0.jar",                        # callers: GLX/oshi (try-catch Throwable, silent), NarratorLinux <clinit> (try-catch Throwable), NarratorWindows (never loaded on Linux)
+    "platform-3.4.0.jar",                   # com.sun.jna.platform - only oshi Windows internals (never loaded on Android)
+    "junixsocket-common-2.6.2.jar",         # only com.jagrosh DiscordIPC UnixPipe (disabled on Android via -Dsigma.android=true)
     "junixsocket-native-common-2.6.2.jar",  # same
-    "joda-time-2.12.5.jar",                 # zero refs
-    "snakeyaml-2.0.jar",                    # zero refs
+    "joda-time-2.12.5.jar",                 # only fastjson JodaCodec, registered behind guarded Class.forName("org.joda.time...") try/catch
     "google-api-services-analytics-v3-rev169-1.25.0.jar",        # client only uses youtube v3
     "google-api-services-youtubereporting-v1-rev748-1.25.0.jar", # unused
     "google-api-services-youtubeAnalytics-v2-rev272-1.25.0.jar", # unused
@@ -137,8 +141,8 @@ def main():
     manifest = (
         "Manifest-Version: 1.0\r\n"
         "Main-Class: net.minecraft.client.main.Main\r\n"
-        "Implementation-Title: SigmaNG-Android-14.2\r\n"
-        "Implementation-Version: 14.2-android\r\n"
+        "Implementation-Title: SigmaNG-Android-14.3\r\n"
+        "Implementation-Version: 14.3-android\r\n"
         "Specification-Title: SigmaNG Client Version (FCL + GL4ES)\r\n"
     ).encode("utf-8")
 
