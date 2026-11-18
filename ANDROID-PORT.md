@@ -262,3 +262,68 @@ java.lang.NoClassDefFoundError: org/yaml/snakeyaml/constructor/BaseConstructor
      تسجيل البروتوكولات 1.4.6/7 → 1.20، وتحميل الـ mappings مع استخدام fastutil
      المقلمة (`Long2ObjectOpenHashMap`) بنجاح — دليل إضافي أن القصّ لم يكسر حاجات ViaVersion.
 4. لا تغيير في `src/` مطلقاً؛ ولا في الثيم/الواجهة/الرسم/الموديولات.
+
+## إصلاح كراش القائمة الرئيسية (commit 6 — إصدار android-v14.4)
+
+### الكراش (من تقرير FCL ثانٍ على الجهاز نفسه — Infinix X6833B، لكن بالعارض Holy-GL4ES/GL2.1)
+
+```
+net.minecraft.crash.ReportedException: Rendering screen
+Caused by: java.lang.ExceptionInInitializerError
+	at info.sigmaclient.sigma.gui.mainmenu.SelectAddonsGUI.draw
+Caused by: java.lang.IllegalStateException: Shader (35632) failed to compile!
+	at info.sigmaclient.sigma.utils.render.ShaderUtil.createShader
+	at info.sigmaclient.sigma.utils.render.ShaderUtil.<init>
+	at info.sigmaclient.sigma.utils.render.blurs.JelloBlur.<clinit>
+```
+
+اللوج قبل الكراش يوثق فشل ترجمة شيدر البلبور نفسه:
+`0:53: L0002: No matching function for call to 'texture2D'` + `Undeclared variable 'sum'`
+— أي أن GLSL سطح-المكتب (110/120، `texture2D`/`varying`) لم يترجم على مسار GLES2.
+
+### السبب الجذري
+
+عارض Holy-GL4ES يقدّم OpenGL 2.1 (backend GLES 2.0) بينما Krypton (تجربة 14.3 الأولى)
+يقدّم GL 3.1 ويترجم هذه الشيدرات بنجاح. `ShaderUtil.createShader` كان يرمي
+`IllegalStateException` عند فشل الترجمة، والمُنشئات تستدعى من مُهيّئات ثابتة
+(`JelloBlur.<clinit>`) → `ExceptionInInitializerError` → كراش كامل عند أول إطار
+للقائمة. ونفس الكلاسات (JelloBlur/Bloom/Gradient/RoundedRectShader...) يستخدمها
+الـ ClickGUI والـ HUD داخل اللعبة — الكراش كان سيحدث مجدداً داخل اللعبة على هذا العارض.
+
+### الإصلاح — تدهور رشيد (graceful degradation) بدل الكراش
+
+1. `ShaderUtil`: المُنشئات الثلاثة صارت لا ترمي أبداً (try/catch(Throwable) كامل —
+   يشمل فشل الترجمة والربط وNoClassDefFoundError عند غياب GL). أي فشل →
+   `usable=false` + سطر لوج واحد + كل الميثودات (init/unload/getUniform/setUniform*)
+   no-op. أُضيف `isUsable()`. (ملاحظة تدقيقية: الصياغة الأولى كانت تُبقي فشل
+   `createShader` خارج الالتقاط في المُنشئ الأول — اكتُشفت بالمراجعة ودُمجت في try واحد.)
+2. `JelloBlur`/`Bloom`: حارس `!kawaseUp.isUsable() || !kawaseDown.isUsable()` في
+   مداخل الرسم → تخطٍ كامل للبلبور/البloom على العارضات غير الداعمة.
+3. `Gradient.drawGradient`/`RoundedRectShader.drawRound`: بديل لوني ثابت
+   (`RenderUtils.drawRect`) بدل الرسم بشيدر ميت. البقية (GradientGlowing/
+   GradientRoundRectShader/RoundRectShader وapplyGradient*) تحتوي أصلاً drawRect
+   لونياً داخل مسارها فتتحول تلقائياً بلا تعديل — والمحتوى (content.run) يبقى يُرسم.
+4. `JelloBlur`/`Bloom`: `Framebuffer` أصبح lazy (كان `new Framebuffer(1,1,false)`
+   في <clinit> — لا فائدة منه لأن initFramebuffers يستبدله فوراً، وبناءه خارج سياق
+   ثريد الرسم يرمي RenderSystem.assertThread).
+5. القائمة الرئيسية وClickGUI وHUD: **صفر تعديل** — القائمة كلها مستطيلات عادية
+   تعمل على أي GL، والبلبور تحسين فوقها يُعطَّل رشيداً.
+
+### الإثبات (A/B + بوابات CI)
+
+- `android/ProbeShader.java` (جديد): يحمّل الفئات السبع كاملة ويستدعي مداخل
+  البلبور على الجار وحده في الـ classpath (بلا LWJGL — نفس نمط "المُنشئ يجب ألا يرمي").
+  - جار 14.3 **المنشور فعلاً**: `NoClassDefFoundError` يهرب من `ShaderUtil.<init>`
+    عبر `JelloBlur.<clinit>` — نفس نمط كراش الجهاز حرفياً.
+  - جار 14.4: **نجاح كامل** — الفئات السبع تهيأ، `kawaseUp.isUsable()=false`،
+    `renderRectBlur/renderBlur` no-ops آمنة، ورسالة واحدة لكل شيدر معطّل.
+- أُضيفت الخطوة للـ CI كبوابة انحدار (مع ProbeVia الخاص بـ 14.3 — كلاهما يمر).
+- الترجمة: 5621 مصدراً / 7867 كلاساً — نفس أعداد 14.3؛ الـ audit: PASS.
+
+### ملاحظة للعارضات
+
+| العارض | GL المقدَّم | النتيجة على 14.4 |
+| --- | --- | --- |
+| Krypton Wrapper (NG-GL4ES) | 3.1 | كل التأثيرات تعمل (بلبور + تدرجات) |
+| Holy-GL4ES | 2.1 (GLES2) | مستقر؛ بلا شيدرات — بديل لوني ثابت |
+| GL4ES المدمج (زونك حسب الإعداد) | حسب الإعداد | حسب ما يترجم من GLSL |

@@ -1,5 +1,6 @@
 package info.sigmaclient.sigma.utils.render.blurs;
 import info.sigmaclient.sigma.utils.render.rendermanagers.ScaledResolution;
+import info.sigmaclient.sigma.utils.render.RenderUtils;
 import info.sigmaclient.sigma.utils.render.ShaderUtil;
 import net.minecraft.client.Minecraft;
 
@@ -19,6 +20,12 @@ public class Gradient {
 
 
     public static void drawGradient(float x, float y, float width, float height, float alpha, Color bottomLeft, Color topLeft, Color bottomRight, Color topRight) {
+        if (!gradientShader.isUsable()) {
+            // Android/GL4ES fallback: flat fill of the dominant color instead of a gradient
+            RenderUtils.drawRect(x, y, x + width, y + height,
+                    new Color(bottomLeft.getRed(), bottomLeft.getGreen(), bottomLeft.getBlue(), (int) Math.min(255, Math.max(0, alpha * 255))).getRGB());
+            return;
+        }
         ScaledResolution sr = new ScaledResolution(mc);
 
         setAlphaLimit(0);

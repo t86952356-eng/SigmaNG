@@ -21,7 +21,9 @@ public class Bloom {
     public static ShaderUtil kawaseDown = new ShaderUtil("kawaseDownBloom");
     public static ShaderUtil kawaseUp = new ShaderUtil("kawaseUpBloom");
 
-    public static Framebuffer framebuffer = new Framebuffer(1, 1, true);
+    // Lazy since v14.4 (eager 1x1 was replaced on first use anyway; constructing
+    // outside a render-thread context throws RenderSystem.assertThread).
+    public static Framebuffer framebuffer;
 
 
     private static int currentIterations;
@@ -54,7 +56,10 @@ public class Bloom {
 
 
     public static void renderBlur(int framebufferTexture, int iterations, int offset) {
-        if (currentIterations != iterations || (framebuffer.framebufferWidth != Module.mc.getMainWindow().getWidth() || framebuffer.framebufferHeight != Module.mc.getMainWindow().getHeight())) {
+        if (!kawaseUp.isUsable() || !kawaseDown.isUsable()) {
+            return; // Android/GL4ES: shader effects unavailable - skip bloom, keep rendering
+        }
+        if (currentIterations != iterations || framebuffer == null || (framebuffer.framebufferWidth != Module.mc.getMainWindow().getWidth() || framebuffer.framebufferHeight != Module.mc.getMainWindow().getHeight())) {
             initFramebuffers(iterations);
             currentIterations = iterations;
         }

@@ -20,7 +20,10 @@ public class JelloBlur {
     public static ShaderUtil kawaseDown = new ShaderUtil("kawaseDown");
     public static ShaderUtil kawaseUp = new ShaderUtil("kawaseUp");
 
-    public static Framebuffer framebuffer = new Framebuffer(1, 1, false);
+    // Lazy since v14.4: the eager 1x1 framebuffer was replaced on first use
+    // anyway (initFramebuffers), and constructing one outside a render-thread
+    // context throws (RenderSystem.assertThread).
+    public static Framebuffer framebuffer;
 
     public static void setupUniforms(float offset) {
         kawaseDown.setUniformf("offset", offset, offset);
@@ -54,7 +57,10 @@ public class JelloBlur {
     }
 
     public static void renderRectBlur(float x,float y,float width,float height,int stencilFrameBufferTexture, int iterations, float offset) {
-        if (mc.getMainWindow().getWidth() != 0 && mc.getMainWindow().getHeight() != 0 && (currentIterations != iterations || framebuffer.framebufferWidth != mc.getMainWindow().getWidth() || framebuffer.framebufferHeight != mc.getMainWindow().getHeight())) {
+        if (!kawaseUp.isUsable() || !kawaseDown.isUsable()) {
+            return; // Android/GL4ES: shader effects unavailable - skip blur, keep rendering
+        }
+        if (mc.getMainWindow().getWidth() != 0 && mc.getMainWindow().getHeight() != 0 && (currentIterations != iterations || framebuffer == null || framebuffer.framebufferWidth != mc.getMainWindow().getWidth() || framebuffer.framebufferHeight != mc.getMainWindow().getHeight())) {
             initFramebuffers(iterations);
             currentIterations = iterations;
         }
@@ -129,7 +135,10 @@ public class JelloBlur {
 
 
     public static void renderBlur(int stencilFrameBufferTexture, int iterations, float offset) {
-        if (mc.getMainWindow().getWidth() != 0 && mc.getMainWindow().getHeight() != 0 && (currentIterations != iterations || framebuffer.framebufferWidth != mc.getMainWindow().getWidth() || framebuffer.framebufferHeight != mc.getMainWindow().getHeight())) {
+        if (!kawaseUp.isUsable() || !kawaseDown.isUsable()) {
+            return; // Android/GL4ES: shader effects unavailable - skip blur, keep rendering
+        }
+        if (mc.getMainWindow().getWidth() != 0 && mc.getMainWindow().getHeight() != 0 && (currentIterations != iterations || framebuffer == null || framebuffer.framebufferWidth != mc.getMainWindow().getWidth() || framebuffer.framebufferHeight != mc.getMainWindow().getHeight())) {
             initFramebuffers(iterations);
             currentIterations = iterations;
         }

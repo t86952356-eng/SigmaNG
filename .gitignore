@@ -33,3 +33,4 @@ Thumbs.db
 .vscode/
 # android build output
 dist/
+dist144/

@@ -10,11 +10,24 @@ import static org.lwjgl.opengl.GL11.*;
 import static org.lwjgl.opengl.GL20.*;
 
 public class ShaderUtil {
-    private final int programID;
+    private int programID;
+    private boolean usable;
 
+    /*
+     * Android/GL4ES hardening (v14.4): on GLES2-class renderers (e.g.
+     * Holy-GL4ES advertising GL 2.1) the desktop GLSL 110/120 shaders fail
+     * to compile, which used to throw IllegalStateException straight out of
+     * the constructor - and since blur/shader classes create their ShaderUtil
+     * instances in static initializers, one failure crashed the whole game
+     * (ExceptionInInitializerError, see JelloBlur.<clinit> crash in the
+     * SigmaNG-Android-14.3 device log). Constructors must therefore NEVER
+     * throw: on any failure the instance is marked unusable, every operation
+     * becomes a no-op and callers degrade to flat rendering (isUsable()).
+     */
     public ShaderUtil(String fragmentShaderLoc, String vertexShaderLoc) {
-        int program = glCreateProgram();
+        int program = 0;
         try {
+            program = glCreateProgram();
             int fragmentShaderID;
             switch (fragmentShaderLoc) {
                 case "jelloBlur":
@@ -84,55 +97,65 @@ public class ShaderUtil {
             glAttachShader(program, vertexShaderID);
 
 
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
+            glLinkProgram(program);
+            int status = glGetProgrami(program, GL_LINK_STATUS);
 
-        glLinkProgram(program);
-        int status = glGetProgrami(program, GL_LINK_STATUS);
-
-        if (status == 0) {
-            throw new IllegalStateException("Shader failed to link!");
+            if (status == 0) {
+                throw new IllegalStateException("Shader failed to link!");
+            }
+            this.programID = program;
+            this.usable = true;
+        } catch (Throwable t) {
+            // IOException, shader compile/link IllegalStateException, or even
+            // NoClassDefFoundError (no GL available) - never propagate.
+            markUnusable(fragmentShaderLoc, t);
         }
-        this.programID = program;
     }
+
     public ShaderUtil(int ignoredProgramID) {
-        int program = glCreateProgram();
+        int program = 0;
+        try {
+            program = glCreateProgram();
 
-        int vertexShaderID = createShader(new ByteArrayInputStream(kawaseUp.getBytes()), GL_VERTEX_SHADER);
-        glAttachShader(program, vertexShaderID);
+            int vertexShaderID = createShader(new ByteArrayInputStream(kawaseUp.getBytes()), GL_VERTEX_SHADER);
+            glAttachShader(program, vertexShaderID);
 
 
-        glLinkProgram(program);
-        int status = glGetProgrami(program, GL_LINK_STATUS);
+            glLinkProgram(program);
+            int status = glGetProgrami(program, GL_LINK_STATUS);
 
-        if (status == 0) {
-            throw new IllegalStateException("Shader failed to link!");
+            if (status == 0) {
+                throw new IllegalStateException("Shader failed to link!");
+            }
+            this.programID = program;
+            this.usable = true;
+        } catch (Throwable t) {
+            markUnusable("kawaseUp", t);
         }
-        this.programID = program;
     }
 
     public ShaderUtil(String fragmentShadersrc, boolean notUsed) {
-        int program = glCreateProgram();
-        int fragmentShaderID = createShader(new ByteArrayInputStream(fragmentShadersrc.getBytes()), GL_FRAGMENT_SHADER);
-        int vertexShaderID = 0;
+        int program = 0;
         try {
-            vertexShaderID = createShader(mc.getResourceManager().getResource(new ResourceLocation("Tenacity/Shaders/vertex.vsh")).getInputStream(), GL_VERTEX_SHADER);
-        } catch (IOException e) {
-            throw new RuntimeException(e);
+            program = glCreateProgram();
+            int fragmentShaderID = createShader(new ByteArrayInputStream(fragmentShadersrc.getBytes()), GL_FRAGMENT_SHADER);
+            int vertexShaderID = createShader(mc.getResourceManager().getResource(new ResourceLocation("Tenacity/Shaders/vertex.vsh")).getInputStream(), GL_VERTEX_SHADER);
+
+            glAttachShader(program, fragmentShaderID);
+            glAttachShader(program, vertexShaderID);
+
+
+
+            glLinkProgram(program);
+            int status = glGetProgrami(program, GL_LINK_STATUS);
+            if (status == 0) {
+                throw new IllegalStateException("Shader failed to link!");
+            }
+            this.programID = program;
+            this.usable = true;
+        } catch (Throwable t) {
+            markUnusable(fragmentShadersrc.length() > 32 ? fragmentShadersrc.substring(0, 32) : fragmentShadersrc, t);
         }
-
-        glAttachShader(program, fragmentShaderID);
-        glAttachShader(program, vertexShaderID);
-
-
-
-        glLinkProgram(program);
-        int status = glGetProgrami(program, GL_LINK_STATUS);
-        if (status == 0) {
-            throw new IllegalStateException("Shader failed to link!");
-        }
-        this.programID = program;
 
     }
 
@@ -141,20 +164,40 @@ public class ShaderUtil {
     }
 
 
+    private void markUnusable(String which, Throwable t) {
+        this.programID = 0;
+        this.usable = false;
+        System.out.println("[SigmaNG] Shader '" + which + "' unavailable on this renderer (" + t
+                + "); shader effects disabled, flat fallback in use");
+    }
+
+    /**
+     * false when the program could not be created/compiled/linked (e.g.
+     * GLES2-class Android renderers). All operations are no-ops then, and
+     * callers should fall back to flat rendering.
+     */
+    public boolean isUsable() {
+        return usable;
+    }
+
     public void init() {
+        if (!usable) return;
         glUseProgram(programID);
     }
 
     public void unload() {
+        if (!usable) return;
         glUseProgram(0);
     }
 
     public int getUniform(String name) {
+        if (!usable) return -1;
         return glGetUniformLocation(programID, name);
     }
 
 
     public void setUniformf(String name, float... args) {
+        if (!usable) return;
         int loc = glGetUniformLocation(programID, name);
         switch (args.length) {
             case 1:
@@ -173,6 +216,7 @@ public class ShaderUtil {
     }
 
     public void setUniformi(String name, int... args) {
+        if (!usable) return;
         int loc = glGetUniformLocation(programID, name);
         if (args.length > 1) glUniform2i(loc, args[0], args[1]);
         else glUniform1i(loc, args[0]);

@@ -141,8 +141,8 @@ def main():
     manifest = (
         "Manifest-Version: 1.0\r\n"
         "Main-Class: net.minecraft.client.main.Main\r\n"
-        "Implementation-Title: SigmaNG-Android-14.3\r\n"
-        "Implementation-Version: 14.3-android\r\n"
+        "Implementation-Title: SigmaNG-Android-14.4\r\n"
+        "Implementation-Version: 14.4-android\r\n"
         "Specification-Title: SigmaNG Client Version (FCL + GL4ES)\r\n"
     ).encode("utf-8")
 

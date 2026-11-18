@@ -1,6 +1,7 @@
 package info.sigmaclient.sigma.utils.render.blurs;
 
 import info.sigmaclient.sigma.utils.render.ShaderUtil;
+import info.sigmaclient.sigma.utils.render.RenderUtils;
 import info.sigmaclient.sigma.utils.render.rendermanagers.ScaledResolution;
 
 import java.awt.*;
@@ -13,6 +14,11 @@ public class RoundedRectShader {
     private static final ShaderUtil shader = new ShaderUtil("roundedRect");
 
     public static void drawRound(float x, float y, float width, float height, float radius, Color color) {
+        if (!shader.isUsable()) {
+            // Android/GL4ES fallback: plain square rect instead of rounded shader rect
+            RenderUtils.drawRect(x, y, x + width, y + height, color.getRGB());
+            return;
+        }
         resetColor();
         startBlend();
 

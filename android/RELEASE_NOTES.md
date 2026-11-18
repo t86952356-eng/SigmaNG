@@ -1,34 +1,36 @@
-# SigmaNG 14.3 — Android Client Version (1.16.4)
+# SigmaNG 14.4 — Android Client Version (1.16.4)
 
 نسخة **SigmaNG** المعدّلة لتعمل على أندرويد عبر **Fold Craft Launcher (FCL)** مع عارض **GL4ES** أو **Krypton Wrapper (NG-GL4ES)** المعدّل — بنظام **Client Version** مستقل على ماينكرافت **1.16.4**.
 
-- الملفات: `SigmaNG-Android-14.3.jar` (العميل الكامل) + `SigmaNG-Android-14.3.json` (ملف الإصدار).
+- الملفات: `SigmaNG-Android-14.4.jar` (العميل الكامل) + `SigmaNG-Android-14.4.json` (ملف الإصدار).
 - المصدر: https://github.com/t86952356-eng/SigmaNG
 - البناء يتم تلقائياً عبر GitHub Actions في هذا المستودع.
 
 ---
 
-## ما الجديد في 14.3 (إصلاح كراش الإقلاع)
+## ما الجديد في 14.4 (إصلاح كراش القائمة الرئيسية)
 
-**إصلاح عاجل لكراش الإقلاع الذي ظهر في 14.2 على الأجهزة:**
+**إصلاح عاجل لكراش مرحلة "لوجو Mojang / القائمة الرئيسية" الذي ظهر في 14.3:**
 
 ```
-java.lang.NoClassDefFoundError: org/yaml/snakeyaml/constructor/BaseConstructor
-	at ...vialoadingbase.platform.ViaVersionPlatformImpl.<init>
-	...
-	at info.sigmaclient.sigma.SigmaNG.initClient
+java.lang.IllegalStateException: Shader (35632) failed to compile!
+	at ...utils.render.ShaderUtil.createShader
+	at ...utils.render.blurs.JelloBlur.<clinit>
+	at ...gui.mainmenu.SelectAddonsGUI.draw   ← كراش عند أول إطار للقائمة
 ```
 
-**السبب:** عند تخفيف الحجم في 14.2 استُبعد جار `snakeyaml` باعتباره "غير مستخدم" لأن لا شيء في سورس العميل يستورده — لكن **جارات ViaVersion نفسها** (نظام تعدد الإصدارات داخل العميل) تعتمد عليه داخلياً (تبعية مكتبة-لمكتبة لا تظهر في فحص السورس). وعلى الجهاز يعمل العميل بجار واحد فقط في الـ classpath، فأي مكتبة مفقودة = كراش فوري.
+**السبب:** شيدرات البلبور/التدرجات في العميل مكتوبة بـ GLSL سطح-مكتب (110/120). عارض **Holy-GL4ES** يقدّم OpenGL 2.1/GLES2 فقط، فتفشل ترجمة الشيدر — والفشل كان يُرمى كاستثناء غير ملتقط من المُهيّئ الثابت للكلاس = `ExceptionInInitializerError` = كراش فوري. **الأخطر: نفس هذه الكلاسات يستخدمها الـ ClickGUI والـ HUD داخل اللعبة** — أي أن الكراش كان سيحدث ثانية داخل اللعبة على هذا العارض.
 
-**الإصلاح:** أُعيد دمج `snakeyaml` كاملاً (+0.3 MB فقط). كذلك أُعيد تدقيق **كل** الجارات المستبعدة العشرة الأخرى بفحص أعماق الـ bytecode (constant-pool) لكل الكلاسات المدمجة — كلها مؤكدة الآمان:
-- `jna`/`platform`: كل مستدعيها إما محمي بـ try-catch (ناريتور النظام، معلومات CPU) أو لا يُحمَّل أصلاً على أندرويد (مسارات oshi الويندوزية).
-- `joda-time`: يُسجَّل في fastjson خلف `Class.forName` محمي.
-- `junixsocket`: يُستخدم فقط في Discord RPC وهو معطَّل على أندرويد أصلاً.
+**الإصلاح (تدهور رشيد بدل الكراش):**
+- `ShaderUtil` لم يعد يرمي أبداً: أي فشل (تجميع/ربط/غياب GL) يحوّله لوضع no-op ويطبع رسالة واحدة في اللوج.
+- البلبور/البloom (JelloBlur/Bloom): يتخطى نفسه تلقائياً على العارضات التي لا تدعم الشيدرات.
+- التدرجات والمستطيلات الدائرية (Gradient/RoundedRectShader): ترسم **بديلاً لونياً ثابتاً** (بدون تدرج/تدوير زوايا) بدل الانهيار.
+- القائمة الرئيسية نفسها **لم تُحذف ولم تتغير** — كل عناصرها مرسومة بمستطيلات عادية تعمل على أي عارض؛ فقط تأثير البلبور يُعطَّل على العارضات الضعيفة.
+- ClickGUI وHUD **لم يُلمس كودهما إطلاقاً** — الإصلاح في طبقة الشيدر المشتركة تحتهما، وهو ما يمنع نفس الكراش داخل اللعبة.
 
-الحجم بقي خفيفاً: **~79.7 MB** (مقابل 79.4 في 14.2 و 109.2 في 14.1). لا يزال **دون أي تعديل على الثيم أو الواجهة أو الرسم أو الموديولات** (`git diff` على `src/` فارغ تماماً).
+**نصيحة للحصول على التأثيرات كاملة (بلبور + تدرجات):** استخدم عارض **Krypton Wrapper (NG-GL4ES)** الذي يقدّم GL 3.1 — عليه تُجمَّع الشيدرات وتعمل كل التأثيرات. مع Holy-GL4ES (GL 2.1) سيعمل العميل الآن بثبات لكن بدون تأثيرات الشيدر.
 
-ملاحظة ناتجة عن `-g:none` (موجودة منذ 14.2): آثار الأعطال (stack traces) تظهر بدون أرقام الأسطر — سلوك اللعب والواجه غير متأثر إطلاقاً.
+الحجم كما هو: **~79.7 MB**. لا تغيير في أي موديول أو ثيم أو أصول واجهة.
 
 ---
 
@@ -39,29 +41,29 @@ java.lang.NoClassDefFoundError: org/yaml/snakeyaml/constructor/BaseConstructor
 2. شغّل FCL مرة واحدة واتركه ينزّل مكوّناته (Java Runtime).
 
 ### 2) تركيب النسخة
-1. حمّل `SigmaNG-Android-14.3.json` و `SigmaNG-Android-14.3.jar` من هذا الـ Release.
-2. اذهب إلى مجلد اللعبة في FCL (الإعدادات ← مسار اللعبة، غالباً `Android/data/com.fcl.konan/files/.minecraft` أو المجلد الذي اخترته).
-3. أنشئ مجلداً: `versions/SigmaNG-Android-14.3/`
+1. حمّل `SigmaNG-Android-14.4.json` و `SigmaNG-Android-14.4.jar` من هذا الـ Release.
+2. اذهب إلى مجلد اللعبة في FCL (الإعدادات ← مسار اللعبة).
+3. أنشئ مجلداً: `versions/SigmaNG-Android-14.4/`
 4. ضع داخل الملفين بالاسمين **تماماً كما هما**:
-   - `versions/SigmaNG-Android-14.3/SigmaNG-Android-14.3.json`
-   - `versions/SigmaNG-Android-14.3/SigmaNG-Android-14.3.jar`
-   - (يكفي وضع ملف JSON وحده؛ سيقوم FCL بتنزيل الجار تلقائياً من هذا الـ Release عند أول تشغيل إذا وضعت الـ JSON فقط.)
-   - من ثبت النسخة المعطوبة (14.2): احذف مجلد `versions/SigmaNG-Android-14.2/` القديم بعد التثبيت.
-5. أعد فتح قائمة الإصدارات في FCL وستظهر النسخة باسم **SigmaNG-Android-14.3**.
+   - `versions/SigmaNG-Android-14.4/SigmaNG-Android-14.4.json`
+   - `versions/SigmaNG-Android-14.4/SigmaNG-Android-14.4.jar`
+   - (يكفي وضع ملف JSON وحده؛ سيقوم FCL بتنزيل الجار تلقائياً من هذا الـ Release عند أول تشغيل.)
+   - من ثبت النسخة السابقة (14.3): احذف مجلد `versions/SigmaNG-Android-14.3/` القديم بعد التثبيت.
+5. أعد فتح قائمة الإصدارات في FCL وستظهر النسخة باسم **SigmaNG-Android-14.4**.
 
 ### 3) إعدادات التشغيل المهمة
 - **Java Runtime**: اختر **Java 17** (أو أحدث — الكود مترجم بمستوى Java 17، لن يعمل على Java 8).
 - **الذاكرة (RAM)**: 2–3 GB على الأقل (الجار ~76 MB).
 - **العارض (Renderer)**:
-  - الخيار الأول: **GL4ES** (المدمج في FCL) — يعمل مع الرسم الافتراضي للعبة.
-  - الخيار الثاني: **Krypton Wrapper (NG-GL4ES)** — عارض GL4ES معدّل يدعم شيدرز أحدث وأداء أفضل:
+  - الخيار الأول الموصى به: **Krypton Wrapper (NG-GL4ES)** — يقدّم GL 3.1 فتعمل كل تأثيرات الشيدر (بلبور/تدرجات):
     1. حمّل إضافة العارض: https://github.com/BZLZHH/NGG-FCLRendererPlugin
     2. ثبّتها في FCL (الإعدادات ← الإضافات/Plugins ← تثبيت من ملف APK).
     3. اختر العارض Krypton من قائمة العارضات قبل التشغيل.
+  - الخيار الثاني: **Holy-GL4ES** أو **GL4ES** المدمج — يعمل الآن بثبات مع 14.4 لكن بدون تأثيرات الشيدر (ألوان ثابتة بدل البلبور/التدرجات).
 - عند أول تشغيل سيقوم FCL بتنزيل الأصول (assets) الرسمية لـ 1.16.4 (~330 MB) من سيرفرات Mojang.
 
 ### 4) تشغيل
-اختر نسخة `SigmaNG-Android-14.3` ← سجّل دخولك بحسابك (تُدار الحسابات من FCL نفسه) ← اضغط تشغيل.
+اختر نسخة `SigmaNG-Android-14.4` ← سجّل دخولك بحسابك (تُدار الحسابات من FCL نفسه) ← اضغط تشغيل.
 
 ---
 
@@ -71,17 +73,19 @@ java.lang.NoClassDefFoundError: org/yaml/snakeyaml/constructor/BaseConstructor
 
 | التعديل | السبب |
 | --- | --- |
-| تعطيل Discord RPC على أندرويد (`-Dsigma.android=true`) | مكتبة junixsocket تحمّل natives سطح مكتب فقط → `UnsatisfiedLinkError` (خطأ غير ملتقط) كان سيسبب كراش عند الإقلاع |
+| تعطيل Discord RPC على أندرويد (`-Dsigma.android=true`) | مكتبة junixsocket تحمّل natives سطح مكتب فقط → كانت ستسبب كراشاً عند الإقلاع |
 | عدم إيقاف العميل عند فشل تحميل شاشة الخريطة المصغّرة | كان `RuntimeException` يوقف كل شيء إذا تعذّر قراءة ملفات Xaero |
 | حذف تنزيل وتشغيل `yt-dlp.exe` (ميزة تنزيل الموسيقى) كاملاً من السورس | ملف تنفيذي خاص بويندوز لا يعمل على أندرويد |
 | حذف نوافذ Swing لمشغل MP3 من السورس | نافذة سطح مكتب لا تُعرض على أندرويد أصلاً |
-| تحمّل فشل تهيئة شيدرز البلور (Jello/Sigma5 blur) | درايفرات GL4ES قد تفشل في تجميع الشيدر → كان يسبب `RuntimeException` عند الإقلاع؛ الآن يتم تعطيل البلور فقط والاستمرار |
+| تحمّل فشل تهيئة شيدرز البلور | درايفرات GL4ES قد تفشل في تجميع الشيدر → كان يسبب `RuntimeException` عند الإقلاع؛ الآن يتم تعطيل البلور فقط والاستمرار |
 | دمج كل المكتبات داخل جار واحد بدون LWJGL | FCL/Pojav يحقنان نسخة LWJGL الخاصة بهما (3.3.x) أولاً في الـ classpath ويوفران الـ natives — يجب ألا تُحجب |
+| (14.4) احتواء فشل ترجمة أي شيدر بدل رمي استثناء | عارضات GLES2 (Holy-GL4ES) لا تترجم GLSL 110/120 — الفشل أصبح تعطيلاً رشيقاً للتأثير مع بديل لوني، لا كراشاً في القائمة أو داخل اللعبة |
 
 ## ملاحظات
 - إصدار ماينكرافت الأساسي: **1.16.4** (يظهر كإصدار مستقل).
 - حسابات Microsoft/الإضافة تُدار من الـ Launcher (آلية المصادقة الرسمية) — لم يتم تجاوز أي نظام تحقق.
 - شيدرز OptiFine: تعمل مع العارضات المتقدمة (Krypton Wrapper/Zink) بدرجات متفاوتة؛ الرسم الافتراضي يعمل مع GL4ES.
+- آثار الأعطال تظهر بدون أرقام أسطر (نتيجة `-g:none` لتقليل الحجم) — لا يؤثر على اللعب.
 
 ---
 
@@ -89,6 +93,6 @@ java.lang.NoClassDefFoundError: org/yaml/snakeyaml/constructor/BaseConstructor
 
 SigmaNG (Minecraft 1.16.4, full-source client) packaged as a standalone **Client Version** for **Fold Craft Launcher** on Android, with **GL4ES** (built-in) or the modified **Krypton Wrapper / NG-GL4ES** renderer (https://github.com/BZLZHH/NG-GL4ES, plugin: https://github.com/BZLZHH/NGG-FCLRendererPlugin).
 
-**v14.3 hotfix** — fixes the 14.2 startup crash `NoClassDefFoundError: org/yaml/snakeyaml/constructor/BaseConstructor` in `ViaVersionPlatformImpl.<init>`: snakeyaml was excluded from the fat jar in 14.2 because nothing in the client source imports it, but ViaVersion's own bundled jars reference it internally (lib-to-lib dependency invisible to a source-level audit). It is merged again (+0.3 MB only). All ten remaining excluded jars were re-audited with a constant-pool scan of every merged class (android/audit_exclusions.py): jna/platform (all callers try-catch-Throwable or never loaded on Android), joda-time (guarded `Class.forName` in fastjson), junixsocket (Discord RPC, disabled on Android) — all verified safe. Jar stays slim at ~79.7 MB (79.4 MB in 14.2, 109.2 MB in 14.1). Zero source changes — themes, UI, visuals and modules untouched.
+**v14.4 hotfix** — fixes the 14.3 main-menu crash (`IllegalStateException: Shader (35632) failed to compile!` in `JelloBlur.<clinit>` via `SelectAddonsGUI.draw`): the client's blur/gradient shaders are desktop GLSL 110/120, which GLES2-class renderers (Holy-GL4ES advertising GL 2.1) cannot compile; the failure escaped a static initializer as `ExceptionInInitializerError` and killed the game at the first menu frame. Since the very same shader classes back the in-game ClickGUI and HUD, the identical crash would have re-appeared in-game. Fix: ShaderUtil constructors never throw anymore (compile/link/missing-GL failures switch the instance to a no-op mode with a single log line), JelloBlur/Bloom skip themselves when unusable, Gradient/RoundedRectShader fall back to flat color fills, and blur framebuffers are created lazily. The custom main menu is untouched (all its elements are plain rects that render on any GL) — only the shader effects degrade on weak renderers. ClickGUI/HUD code untouched. For full effects (blur/gradients) use the Krypton Wrapper renderer (GL 3.1); on Holy-GL4ES/GL2.1 the client now runs stable with flat fallbacks. Verified by CI smoke test `android/ProbeShader.java` reproducing the exact crash path: published 14.3 jar fails with the uncaught constructor error; 14.4 jar initializes all 7 shader classes cleanly and blurs are safe no-ops. Zero module/theme/asset changes; jar stays ~79.7 MB.
 
-Install: place `SigmaNG-Android-14.3.json` (+ optional `SigmaNG-Android-14.3.jar`) into `<game dir>/versions/SigmaNG-Android-14.3/`, pick **Java 17** runtime, pick a GL4ES-family renderer, launch. Android-specific hardening: Discord RPC disabled via `-Dsigma.android=true`, yt-dlp removed, minimap load and blur-shader failures made non-fatal, LWJGL excluded from the fat jar (launcher injects its own). No game modules were modified.
+Install: place `SigmaNG-Android-14.4.json` (+ optional `SigmaNG-Android-14.4.jar`) into `<game dir>/versions/SigmaNG-Android-14.4/`, pick **Java 17** runtime, pick a GL4ES-family renderer, launch. No game modules were modified.
